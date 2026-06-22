@@ -22,6 +22,10 @@ COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/public ./public
 COPY package.json ./
 COPY src ./src
+# Pre-create the data directory so the SQLite file has somewhere to land even if
+# no host volume is bind-mounted. (Single-user app: container runs as root for
+# bind-mount simplicity — no privileged ports, no inbound network from data,
+# and container isolation is the real security boundary anyway.)
+RUN mkdir -p /app/data
 EXPOSE 8454
-USER node
 CMD ["node", "src/server.js"]
