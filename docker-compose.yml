@@ -1,0 +1,22 @@
+services:
+  notebook:
+    build: .
+    image: notebook-online
+    container_name: notebook-online
+    restart: unless-stopped
+    ports:
+      - "${PORT:-8454}:8454"
+    environment:
+      NOTEBOOK_PASSWORD: ${NOTEBOOK_PASSWORD:?set NOTEBOOK_PASSWORD in .env}
+      SESSION_SECRET:    ${SESSION_SECRET:?set SESSION_SECRET in .env}
+      API_TOKEN:         ${API_TOKEN:-}
+      COOKIE_SECURE:     ${COOKIE_SECURE:-0}
+      LOG_LEVEL:         ${LOG_LEVEL:-info}
+    volumes:
+      - ./data:/app/data
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8454/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s

@@ -1,0 +1,618 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Notebook — 样板预览</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Lora:ital,wght@0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <style>
+    /* ---------------- Design tokens ---------------- */
+    :root {
+      --bg:         #FDFBF7;  /* paper */
+      --bg-elev:   #FFFFFF;
+      --fg:         #1A1A1A;  /* ink */
+      --fg-soft:   #4A4A4A;
+      --muted:      #F5F2EC;  /* sand */
+      --muted-fg:  #6B6B68;
+      --border:    #E8E2D5;
+      --border-strong: #D6CFBE;
+      --accent:    #D97706;  /* amber */
+      --accent-soft: rgba(217, 119, 6, 0.10);
+      --danger:    #DC2626;
+      --shadow:    0 4px 16px rgba(0,0,0,0.06);
+      --radius:    6px;
+      --topbar-h:  44px;
+    }
+    [data-theme="dark"] {
+      --bg:         #1B1B1F;
+      --bg-elev:   #232328;
+      --fg:         #E8E6E0;
+      --fg-soft:   #B8B5AC;
+      --muted:      #2A2A30;
+      --muted-fg:  #8A8780;
+      --border:    #34343C;
+      --border-strong: #44444E;
+      --accent:    #E08A1E;
+      --accent-soft: rgba(224, 138, 30, 0.12);
+      --danger:    #EF5757;
+      --shadow:    0 4px 16px rgba(0,0,0,0.30);
+    }
+
+    html, body { background: var(--bg); color: var(--fg); }
+    body {
+      font-family: 'Inter', system-ui, -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+      font-size: 14px;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+    }
+    .font-serif { font-family: 'Lora', Georgia, 'Songti SC', serif; }
+    .font-mono { font-family: 'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace; }
+    .hairline { border-color: var(--border); }
+    .hairline-strong { border-color: var(--border-strong); }
+
+    /* ---------------- Components ---------------- */
+    .btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      height: 30px; padding: 0 12px;
+      border-radius: var(--radius);
+      font-size: 13px; font-weight: 500;
+      color: var(--fg-soft);
+      transition: background 120ms ease, color 120ms ease;
+      cursor: pointer; user-select: none;
+    }
+    .btn:hover { background: var(--muted); color: var(--fg); }
+    .btn-primary {
+      background: var(--accent); color: #fff;
+    }
+    .btn-primary:hover { background: var(--accent); color: #fff; filter: brightness(1.05); }
+    .btn-ghost-icon {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 30px; height: 30px; border-radius: var(--radius);
+      color: var(--fg-soft); cursor: pointer;
+      transition: background 120ms ease, color 120ms ease;
+    }
+    .btn-ghost-icon:hover { background: var(--muted); color: var(--fg); }
+
+    .input {
+      background: var(--muted);
+      border: 1px solid transparent;
+      border-radius: var(--radius);
+      padding: 7px 12px;
+      color: var(--fg);
+      font-size: 13px;
+      outline: none;
+      transition: border-color 120ms ease, background 120ms ease;
+      width: 100%;
+    }
+    .input:focus { border-color: var(--accent); background: var(--bg-elev); }
+    .input::placeholder { color: var(--muted-fg); }
+
+    .topbar {
+      height: var(--topbar-h);
+      background: var(--bg);
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center;
+      padding: 0 14px; gap: 12px;
+    }
+    .col-folders {
+      width: 220px; min-width: 220px;
+      background: var(--bg);
+      border-right: 1px solid var(--border);
+      overflow-y: auto;
+      padding: 10px 6px;
+    }
+    .col-notes {
+      width: 280px; min-width: 280px;
+      background: var(--bg);
+      border-right: 1px solid var(--border);
+      overflow-y: auto;
+    }
+    .col-editor {
+      flex: 1;
+      background: var(--bg-elev);
+      display: flex; flex-direction: column;
+      min-width: 0;
+    }
+
+    /* folder tree */
+    .tree-item {
+      display: flex; align-items: center; gap: 6px;
+      padding: 5px 8px; margin: 1px 2px;
+      border-radius: var(--radius);
+      font-size: 13px;
+      color: var(--fg-soft);
+      cursor: pointer; user-select: none;
+      transition: background 100ms ease, color 100ms ease;
+    }
+    .tree-item:hover { background: var(--muted); color: var(--fg); }
+    .tree-item.is-active {
+      background: var(--accent-soft);
+      color: var(--accent);
+      font-weight: 600;
+    }
+    .tree-item.is-active svg { color: var(--accent); }
+    .tree-item .count {
+      margin-left: auto; font-size: 11px; color: var(--muted-fg);
+      font-variant-numeric: tabular-nums;
+    }
+    .tree-section-title {
+      font-size: 11px; font-weight: 600; letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--muted-fg);
+      padding: 10px 10px 4px;
+    }
+
+    /* note list */
+    .note-card {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+      cursor: pointer;
+      border-left: 2px solid transparent;
+      transition: background 100ms ease, border-left-color 100ms ease;
+    }
+    .note-card:hover { background: var(--muted); }
+    .note-card.is-active {
+      background: var(--accent-soft);
+      border-left-color: var(--accent);
+    }
+    .note-title {
+      font-size: 14px; font-weight: 600; color: var(--fg);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      margin-bottom: 4px;
+    }
+    .note-excerpt {
+      font-size: 12.5px; color: var(--muted-fg);
+      display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+      overflow: hidden; line-height: 1.45;
+      margin-bottom: 6px;
+    }
+    .note-meta {
+      font-size: 11px; color: var(--muted-fg);
+      display: flex; align-items: center; gap: 6px;
+      font-variant-numeric: tabular-nums;
+    }
+    .dot-unsaved {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: var(--accent);
+      display: inline-block; margin-left: 6px;
+    }
+
+    /* editor */
+    .editor-toolbar {
+      height: 38px;
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center;
+      padding: 0 18px; gap: 8px;
+      font-size: 12.5px; color: var(--muted-fg);
+    }
+    .seg {
+      display: inline-flex; align-items: center;
+      border: 1px solid var(--border); border-radius: var(--radius);
+      overflow: hidden;
+    }
+    .seg button {
+      padding: 4px 10px; font-size: 12px; color: var(--muted-fg);
+      background: transparent; cursor: pointer;
+    }
+    .seg button + button { border-left: 1px solid var(--border); }
+    .seg button.is-active { background: var(--accent-soft); color: var(--accent); }
+
+    .editor-body {
+      flex: 1; min-height: 0; display: grid;
+      grid-template-columns: 1fr 1fr;
+    }
+    .editor-source {
+      padding: 28px 36px;
+      font-family: 'JetBrains Mono', ui-monospace, monospace;
+      font-size: 14px; line-height: 1.7;
+      color: var(--fg);
+      overflow-y: auto;
+      border-right: 1px solid var(--border);
+      white-space: pre-wrap;
+      tab-size: 2;
+    }
+    .editor-preview {
+      padding: 28px 44px;
+      overflow-y: auto;
+      max-width: 760px;
+    }
+    .prose { font-family: 'Lora', Georgia, 'Songti SC', serif; font-size: 16.5px; line-height: 1.75; color: var(--fg); }
+    .prose h1 { font-size: 28px; font-weight: 600; margin: 24px 0 12px; letter-spacing: -0.01em; }
+    .prose h2 { font-size: 22px; font-weight: 600; margin: 28px 0 10px; }
+    .prose h3 { font-size: 18px; font-weight: 600; margin: 22px 0 8px; }
+    .prose p  { margin: 0 0 14px; }
+    .prose ul, .prose ol { margin: 0 0 14px 1.2em; }
+    .prose ul li { list-style: disc; margin-bottom: 4px; }
+    .prose ol li { list-style: decimal; margin-bottom: 4px; }
+    .prose a { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; text-decoration-thickness: 1px; }
+    .prose strong { font-weight: 700; color: var(--fg); }
+    .prose blockquote {
+      border-left: 3px solid var(--accent);
+      padding: 2px 16px; margin: 16px 0;
+      color: var(--fg-soft); font-style: italic;
+    }
+    .prose code {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13.5px;
+      background: var(--muted);
+      padding: 1px 6px; border-radius: 4px;
+    }
+    .prose pre {
+      background: var(--muted);
+      padding: 14px 16px;
+      border-radius: var(--radius);
+      overflow-x: auto;
+      margin: 14px 0;
+      border: 1px solid var(--border);
+    }
+    .prose pre code { background: transparent; padding: 0; font-size: 13px; line-height: 1.6; }
+    .prose hr { border: 0; border-top: 1px solid var(--border); margin: 22px 0; }
+    .prose table { border-collapse: collapse; margin: 14px 0; }
+    .prose th, .prose td { border: 1px solid var(--border); padding: 6px 12px; text-align: left; }
+    .prose th { background: var(--muted); font-weight: 600; }
+
+    /* login */
+    .login-wrap {
+      min-height: 100vh; display: grid; place-items: center;
+      background: var(--bg);
+      background-image:
+        radial-gradient(circle at 18% 22%, var(--accent-soft) 0, transparent 38%),
+        radial-gradient(circle at 82% 78%, var(--accent-soft) 0, transparent 42%);
+    }
+    .login-card {
+      width: 360px;
+      background: var(--bg-elev);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 32px 28px 24px;
+      box-shadow: var(--shadow);
+    }
+    .login-brand {
+      display: flex; align-items: center; gap: 10px; margin-bottom: 18px;
+    }
+    .login-mark {
+      width: 30px; height: 30px; border-radius: 7px;
+      background: var(--accent); color: #fff;
+      display: grid; place-items: center;
+      font-family: 'Lora', serif; font-weight: 600; font-size: 18px;
+    }
+    .login-title { font-size: 18px; font-weight: 600; }
+    .login-sub { color: var(--muted-fg); font-size: 13px; margin-bottom: 22px; }
+    .login-input {
+      width: 100%; height: 38px;
+      padding: 0 12px;
+      background: var(--bg);
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius);
+      color: var(--fg); font-size: 14px;
+      outline: none;
+      transition: border-color 120ms ease;
+    }
+    .login-input:focus { border-color: var(--accent); }
+    .login-submit {
+      width: 100%; height: 38px;
+      background: var(--accent); color: #fff;
+      border-radius: var(--radius);
+      font-weight: 600; font-size: 14px;
+      cursor: pointer; margin-top: 12px;
+      transition: filter 120ms ease;
+    }
+    .login-submit:hover { filter: brightness(1.06); }
+    .login-hint { font-size: 12px; color: var(--muted-fg); margin-top: 18px; text-align: center; }
+
+    /* preview controls */
+    .view-tabs {
+      position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%);
+      background: var(--bg-elev);
+      border: 1px solid var(--border-strong);
+      border-radius: 999px;
+      padding: 4px;
+      display: flex; gap: 2px;
+      box-shadow: var(--shadow);
+      z-index: 100;
+    }
+    .view-tabs button {
+      padding: 6px 14px; border-radius: 999px;
+      font-size: 12.5px; color: var(--muted-fg); cursor: pointer;
+      transition: background 120ms ease, color 120ms ease;
+    }
+    .view-tabs button.is-active { background: var(--accent); color: #fff; }
+
+    .scene { display: none; }
+    .scene.is-active { display: block; }
+    .scene-app { height: 100vh; display: flex; flex-direction: column; }
+    .scene-app .main-row { flex: 1; display: flex; min-height: 0; }
+
+    /* scrollbar polish */
+    *::-webkit-scrollbar { width: 8px; height: 8px; }
+    *::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 999px; }
+    *::-webkit-scrollbar-thumb:hover { background: var(--muted-fg); }
+    *::-webkit-scrollbar-track { background: transparent; }
+
+    /* icons */
+    .icon { width: 16px; height: 16px; stroke-width: 1.6; fill: none; stroke: currentColor; flex: none; }
+    .icon-sm { width: 14px; height: 14px; }
+  </style>
+</head>
+<body>
+
+<!-- ============================= LOGIN SCENE ============================= -->
+<section class="scene scene-login is-active">
+  <div class="login-wrap">
+    <form class="login-card" onsubmit="event.preventDefault()">
+      <div class="login-brand">
+        <div class="login-mark">N</div>
+        <div>
+          <div class="login-title">Notebook</div>
+          <div class="login-sub" style="margin-bottom:0">个人在线笔记本</div>
+        </div>
+      </div>
+      <label class="block mb-1 text-[12.5px]" style="color:var(--fg-soft)">密码</label>
+      <input type="password" class="login-input" placeholder="输入访问密码" value="••••••••" />
+      <button type="submit" class="login-submit">进入</button>
+      <p class="login-hint">单用户模式 · 密码在服务器 .env 配置</p>
+    </form>
+  </div>
+</section>
+
+<!-- ============================== APP SCENE ============================== -->
+<section class="scene scene-app">
+  <!-- Top bar -->
+  <header class="topbar">
+    <div class="flex items-center gap-2" style="width:220px">
+      <div style="width:22px;height:22px;border-radius:5px;background:var(--accent);color:#fff;display:grid;place-items:center;font-family:'Lora',serif;font-weight:600;font-size:13px">N</div>
+      <span class="font-semibold" style="color:var(--fg)">Notebook</span>
+    </div>
+    <div class="flex-1 max-w-md">
+      <div class="relative">
+        <svg class="icon icon-sm absolute" style="left:10px;top:50%;transform:translateY(-50%);color:var(--muted-fg)" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <input class="input" placeholder="搜索笔记..." style="padding-left:30px" />
+      </div>
+    </div>
+    <div class="flex items-center gap-1">
+      <button class="btn-ghost-icon" title="切换主题" id="theme-toggle">
+        <svg class="icon" viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+      </button>
+      <button class="btn-ghost-icon" title="登出">
+        <svg class="icon" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- Main 3-column -->
+  <div class="main-row">
+    <!-- Folder tree -->
+    <aside class="col-folders">
+      <div class="tree-section-title flex items-center justify-between">
+        <span>文件夹</span>
+        <button class="btn-ghost-icon" style="width:22px;height:22px" title="新建文件夹">
+          <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+        </button>
+      </div>
+
+      <div class="tree-item">
+        <svg class="icon" viewBox="0 0 24 24"><path d="M22 11v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+        <span>全部笔记</span>
+        <span class="count">42</span>
+      </div>
+
+      <div class="tree-item is-active">
+        <svg class="icon" viewBox="0 0 24 24"><path d="M22 11v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+        <span>工作</span>
+        <span class="count">12</span>
+      </div>
+      <div class="tree-item" style="padding-left:28px">
+        <svg class="icon" viewBox="0 0 24 24"><path d="M22 11v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+        <span>周报</span>
+        <span class="count">4</span>
+      </div>
+      <div class="tree-item" style="padding-left:28px">
+        <svg class="icon" viewBox="0 0 24 24"><path d="M22 11v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+        <span>项目</span>
+        <span class="count">8</span>
+      </div>
+
+      <div class="tree-item">
+        <svg class="icon" viewBox="0 0 24 24"><path d="M22 11v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+        <span>个人</span>
+        <span class="count">18</span>
+      </div>
+      <div class="tree-item">
+        <svg class="icon" viewBox="0 0 24 24"><path d="M22 11v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+        <span>灵感</span>
+        <span class="count">7</span>
+      </div>
+      <div class="tree-item">
+        <svg class="icon" viewBox="0 0 24 24"><path d="M22 11v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+        <span>阅读笔记</span>
+        <span class="count">5</span>
+      </div>
+    </aside>
+
+    <!-- Note list -->
+    <section class="col-notes">
+      <div class="flex items-center justify-between" style="padding:14px 16px 8px">
+        <div>
+          <div class="font-semibold" style="font-size:14px">工作</div>
+          <div style="font-size:11px;color:var(--muted-fg);margin-top:1px">12 篇 · 按更新时间排序</div>
+        </div>
+        <button class="btn btn-primary" style="height:28px;font-size:12.5px">
+          <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+          新建
+        </button>
+      </div>
+
+      <div class="note-card is-active">
+        <div class="note-title">2026 Q2 OKR 复盘<span class="dot-unsaved" title="未保存"></span></div>
+        <div class="note-excerpt">本季度的三个关键结果都按计划交付。下个季度的重点应该回到产品基础体验...</div>
+        <div class="note-meta">今天 14:32 · 1,284 字</div>
+      </div>
+
+      <div class="note-card">
+        <div class="note-title">周会纪要 · 06.20</div>
+        <div class="note-excerpt">— 上线节奏调整为双周一次 — A/B 测试的样本量需要重新评估 — 客户反馈集中在搜索体验...</div>
+        <div class="note-meta">昨天 18:04 · 642 字</div>
+      </div>
+
+      <div class="note-card">
+        <div class="note-title">新功能技术方案</div>
+        <div class="note-excerpt">背景：现有的实时同步方案在弱网下会丢消息，需要引入消息队列。可选方案对比...</div>
+        <div class="note-meta">3 天前 · 2,150 字</div>
+      </div>
+
+      <div class="note-card">
+        <div class="note-title">用户访谈记录</div>
+        <div class="note-excerpt">访谈对象：5 位重度用户。共同痛点：导出功能、跨平台同步、暗色模式的细节...</div>
+        <div class="note-meta">06.15 · 980 字</div>
+      </div>
+
+      <div class="note-card">
+        <div class="note-title">招聘流程改进</div>
+        <div class="note-excerpt">技术面的现场编码改成系统设计讨论，减少候选人焦虑同时更能看出工程素养。</div>
+        <div class="note-meta">06.12 · 412 字</div>
+      </div>
+    </section>
+
+    <!-- Editor + Preview -->
+    <main class="col-editor">
+      <div class="editor-toolbar">
+        <div class="flex-1 flex items-center gap-2">
+          <span style="color:var(--fg)" class="font-medium">工作 / 2026 Q2 OKR 复盘</span>
+          <span style="color:var(--muted-fg)">· 自动保存于 14:32</span>
+        </div>
+        <div class="seg" role="tablist">
+          <button>源码</button>
+          <button class="is-active">分屏</button>
+          <button>预览</button>
+        </div>
+        <button class="btn-ghost-icon" title="导出 .md">
+          <svg class="icon" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/></svg>
+        </button>
+        <button class="btn-ghost-icon" title="分享链接">
+          <svg class="icon" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.5 1.5"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.5-1.5"/></svg>
+        </button>
+        <button class="btn-ghost-icon" title="历史版本">
+          <svg class="icon" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l3 2"/></svg>
+        </button>
+        <button class="btn-ghost-icon" title="删除" style="color:var(--danger)">
+          <svg class="icon" viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="m19 6-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+        </button>
+      </div>
+
+      <div class="editor-body">
+        <div class="editor-source"># 2026 Q2 OKR 复盘
+
+## 本季度结果
+
+- **O1**: 用户活跃度提升 — **达成 95%**
+- **O2**: 核心流程性能优化 — **达成 110%**
+- **O3**: 新平台落地 — **达成 60%**
+
+## 复盘要点
+
+> 三个关键结果都按计划交付，但 O3 的延期暴露了 *资源评估* 偏乐观的问题。
+
+### 做得好的
+
+1. 性能优化的工程化做得彻底
+2. 数据驱动的决策习惯
+3. 跨团队协作的同步节奏
+
+### 需要改进
+
+- [ ] 季度初的资源盘点
+- [ ] 风险预案的提前演练
+- [x] 周会的结论同步
+
+## 下季度方向
+
+回到产品基础体验，重点关注 **搜索** 和 **同步可靠性**。
+
+```ts
+// 示例：搜索结果排序权重
+const weights = {
+  title: 3.0,
+  content: 1.0,
+  recency: 0.5,
+};
+```
+
+详见 [需求文档](#)。
+</div>
+        <div class="editor-preview">
+          <article class="prose">
+            <h1>2026 Q2 OKR 复盘</h1>
+            <h2>本季度结果</h2>
+            <ul>
+              <li><strong>O1</strong>：用户活跃度提升 — <strong>达成 95%</strong></li>
+              <li><strong>O2</strong>：核心流程性能优化 — <strong>达成 110%</strong></li>
+              <li><strong>O3</strong>：新平台落地 — <strong>达成 60%</strong></li>
+            </ul>
+            <h2>复盘要点</h2>
+            <blockquote>三个关键结果都按计划交付，但 O3 的延期暴露了 <em>资源评估</em> 偏乐观的问题。</blockquote>
+            <h3>做得好的</h3>
+            <ol>
+              <li>性能优化的工程化做得彻底</li>
+              <li>数据驱动的决策习惯</li>
+              <li>跨团队协作的同步节奏</li>
+            </ol>
+            <h3>需要改进</h3>
+            <ul style="list-style:none;margin-left:0">
+              <li>☐ 季度初的资源盘点</li>
+              <li>☐ 风险预案的提前演练</li>
+              <li>☑ 周会的结论同步</li>
+            </ul>
+            <h2>下季度方向</h2>
+            <p>回到产品基础体验，重点关注 <strong>搜索</strong> 和 <strong>同步可靠性</strong>。</p>
+            <pre><code>// 示例：搜索结果排序权重
+const weights = {
+  title: 3.0,
+  content: 1.0,
+  recency: 0.5,
+};</code></pre>
+            <p>详见 <a href="#">需求文档</a>。</p>
+          </article>
+        </div>
+      </div>
+    </main>
+  </div>
+</section>
+
+<!-- ===================== Floating scene + theme switcher ===================== -->
+<div class="view-tabs">
+  <button data-scene="login" class="is-active">登录页</button>
+  <button data-scene="app">主界面</button>
+  <span style="width:1px;background:var(--border-strong);margin:4px 4px"></span>
+  <button id="toggle-theme-bottom">切换主题</button>
+</div>
+
+<script>
+  // scene switching
+  document.querySelectorAll('.view-tabs [data-scene]').forEach(b => {
+    b.addEventListener('click', () => {
+      const target = b.dataset.scene;
+      document.querySelectorAll('.scene').forEach(s => s.classList.toggle('is-active', s.classList.contains('scene-' + target)));
+      document.querySelectorAll('.view-tabs [data-scene]').forEach(x => x.classList.toggle('is-active', x === b));
+    });
+  });
+  // theme toggle (both buttons)
+  function toggleTheme() {
+    const root = document.documentElement;
+    root.dataset.theme = root.dataset.theme === 'dark' ? 'light' : 'dark';
+  }
+  document.getElementById('theme-toggle').addEventListener('click', toggleTheme);
+  document.getElementById('toggle-theme-bottom').addEventListener('click', toggleTheme);
+  // segmented buttons demo
+  document.querySelectorAll('.seg').forEach(seg => {
+    seg.addEventListener('click', e => {
+      if (e.target.tagName !== 'BUTTON') return;
+      seg.querySelectorAll('button').forEach(b => b.classList.toggle('is-active', b === e.target));
+    });
+  });
+</script>
+
+</body>
+</html>
