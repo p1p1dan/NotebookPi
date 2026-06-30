@@ -67,3 +67,14 @@ export function setMobilePane(p: AppState['mobilePane']) {
   const back = document.getElementById('topbar-back');
   if (back) back.classList.toggle('is-hidden', p === 'folders');
 }
+
+/// 决定新建/导入笔记时应该落到哪个文件夹。fallback 链:
+///   1) selectedFolderId 是具体 number 或 null → 直接用(明确选了真实文件夹/未归类)
+///   2) selectedFolderId === 'all' 且 currentNote 存在 → 沿用 currentNote.folder_id
+///      (用户在"全部笔记"视图下打开了笔记,新增大概率是续写该上下文)
+///   3) selectedFolderId === 'all' 且无 currentNote → null(未归类,兜底)
+export function resolveCreationTarget(): number | null {
+  if (state.selectedFolderId !== 'all') return state.selectedFolderId;
+  if (state.currentNote) return state.currentNote.folder_id ?? null;
+  return null;
+}

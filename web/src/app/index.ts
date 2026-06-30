@@ -6,7 +6,7 @@ import { icons } from '../icons';
 import { debounce } from '../util';
 import { mountFolderTree } from './folder-tree';
 import { mountNoteList } from './note-list';
-import { mountEditor } from './editor';
+import { mountEditor, applySearchHighlight, clearSearchHighlights } from './editor';
 import { mountImportUI } from './import-ui';
 import { toast } from './toast';
 
@@ -81,6 +81,7 @@ export async function renderApp(root: HTMLElement) {
       state.searchResults = [];
       state.searchLoading = false;
       emit('notes');
+      clearSearchHighlights();
       return;
     }
     state.searchLoading = true;
@@ -89,6 +90,20 @@ export async function renderApp(root: HTMLElement) {
       const { results } = await api.search(q);
       if (state.searchQuery !== q) return; // stale response
       state.searchResults = results;
+      // 自动预览第一条命中:
+      //   - 命中且当前不是同一篇 → dispatch note:select(openNote 完成后会触发 applySearchHighlight)
+      //   - 命中且是同一篇 → 直接刷新高亮+跳转(currentNote 不变,不会走 renderShell 重建路径)
+      //   - 零命中 → 清掉旧高亮,但保留当前打开的笔记
+      if (results.length > 0) {
+        const first = results[0];
+        if (state.currentNote?.id !== first.id) {
+          window.dispatchEvent(new CustomEvent('note:select', { detail: { id: first.id } }));
+        } else {
+          applySearchHighlight(q);
+        }
+      } else {
+        clearSearchHighlights();
+      }
     } catch {
       state.searchResults = [];
       toast('搜索失败', 'error');
@@ -140,4 +155,19 @@ export async function renderApp(root: HTMLElement) {
     console.error(e);
     toast('加载失败，请刷新重试', 'error', 4000);
   }
+
+  // Desktop runtime: an external module (chrome.ts) listens to Tauri events
+  // and dispatches `desktop:refresh` with fresh folders/notes payloads. Hook
+  // them into the existing state so list views update without a reload.
+  window.addEventListener('desktop:refresh', (e: Event) => {
+    const detail = (e as CustomEvent<{ folders?: any[]; notes?: any[] }>).detail || {};
+    if (Array.isArray(detail.folders)) {
+      state.folders = detail.folders as typeof state.folders;
+      emit('folders');
+    }
+    if (Array.isArray(detail.notes)) {
+      state.notes = detail.notes as typeof state.notes;
+      emit('notes');
+    }
+  });
 }

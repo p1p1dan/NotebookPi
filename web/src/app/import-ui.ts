@@ -1,7 +1,7 @@
 // Drag-and-drop + file picker import. Reads files client-side and POSTs each
 // via the existing create-note API. No server-side change needed.
 
-import { state, emit } from './state';
+import { state, emit, resolveCreationTarget } from './state';
 import { api } from '../api';
 import { toast } from './toast';
 import type { NoteFormat, Note } from '../types';
@@ -67,8 +67,8 @@ async function handleFiles(fileList: FileList) {
   const files = all.slice(0, MAX_FILES_PER_DROP);
   if (truncated) toast(`一次最多 ${MAX_FILES_PER_DROP} 个文件，已截断`, 'info');
 
-  // Target folder: current selection. 'all' → 未归类 (null).
-  const target = state.selectedFolderId === 'all' ? null : state.selectedFolderId;
+  // Target folder: 跟手工新建一致,走 resolveCreationTarget 的 fallback 链。
+  const target = resolveCreationTarget();
 
   let success = 0, oversized = 0, badtype = 0, failed = 0;
   const created: Note[] = [];

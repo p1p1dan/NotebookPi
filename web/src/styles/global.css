@@ -165,6 +165,44 @@ a { color: inherit; }
   display: flex; align-items: center; justify-content: space-between;
 }
 .tree-section-title .btn-icon { width: 22px; height: 22px; }
+.tree-section-title.is-toggle { cursor: pointer; user-select: none; }
+.tree-section-title.is-toggle:hover { color: var(--fg); }
+.tree-section-title .tree-chev { transition: transform .15s; }
+.tree-section-title .tree-chev.is-collapsed { transform: rotate(-90deg); }
+
+.fmt-popover {
+  position: fixed; z-index: 10001;
+  background: var(--bg, #fff); color: var(--fg, #222);
+  border: 1px solid var(--border, #ddd); border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.12);
+  padding: 6px; min-width: 240px;
+  display: flex; flex-direction: column; gap: 2px;
+}
+.fmt-popover .fmt-opt {
+  background: transparent; border: 0; cursor: pointer; text-align: left;
+  padding: 8px 10px; border-radius: 6px; color: inherit;
+}
+.fmt-popover .fmt-opt:hover { background: var(--accent-soft, #f3eee7); }
+.fmt-popover .fmt-title { font-weight: 600; font-size: 13px; }
+.fmt-popover .fmt-sub { font-size: 11px; color: var(--muted-fg, #888); margin-top: 2px; }
+
+.move-popover {
+  position: fixed; z-index: 10001;
+  background: var(--bg, #fff); color: var(--fg, #222);
+  border: 1px solid var(--border, #ddd); border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.12);
+  padding: 6px; min-width: 240px; max-height: 320px; overflow: auto;
+}
+.move-popover .mv-item {
+  display: block; width: 100%; background: transparent; border: 0; cursor: pointer;
+  text-align: left; padding: 6px 10px; border-radius: 6px; color: inherit;
+  font-size: 13px;
+}
+.move-popover .mv-item:hover { background: var(--accent-soft, #f3eee7); }
+.move-popover .mv-item.is-current { color: var(--muted-fg, #888); cursor: default; }
+.move-popover .mv-item.is-current:hover { background: transparent; }
+.move-popover .mv-divider { height: 1px; background: var(--border, #eee); margin: 4px 0; }
+.move-popover .mv-title { padding: 4px 10px; font-size: 11px; color: var(--muted-fg, #888); text-transform: uppercase; letter-spacing: .05em; }
 
 .tree-empty {
   padding: 16px 10px; color: var(--muted-fg); font-size: 12.5px; text-align: center;
@@ -435,6 +473,32 @@ a { color: inherit; }
   color: var(--accent);
   padding: 0 2px; border-radius: 2px;
   font-weight: 600;
+}
+
+/* CodeMirror 源码视图里的搜索高亮:跟 .note-excerpt mark 同色系,稍微更显眼 */
+.cm-search-hit {
+  background: rgba(217, 119, 6, 0.28);
+  border-radius: 2px;
+  outline: 1px solid rgba(217, 119, 6, 0.45);
+}
+:root[data-theme="dark"] .cm-search-hit {
+  background: rgba(224, 138, 30, 0.32);
+  outline-color: rgba(224, 138, 30, 0.55);
+}
+
+/* Markdown preview 里的搜索高亮:与 CodeMirror 视觉一致 */
+.prose mark.preview-hit,
+.editor-preview mark.preview-hit {
+  background: rgba(217, 119, 6, 0.28);
+  color: inherit;
+  padding: 0 1px; border-radius: 2px;
+  font-weight: inherit;
+  outline: 1px solid rgba(217, 119, 6, 0.45);
+}
+:root[data-theme="dark"] .prose mark.preview-hit,
+:root[data-theme="dark"] .editor-preview mark.preview-hit {
+  background: rgba(224, 138, 30, 0.32);
+  outline-color: rgba(224, 138, 30, 0.55);
 }
 
 /* =================== History drawer =================== */
