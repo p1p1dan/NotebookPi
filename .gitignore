@@ -23,3 +23,24 @@ data/
 .vscode/
 .idea/
 Thumbs.db
+
+# vflow
+.vflow/journal/
+.vflow/.runtime/
+.vflow/scripts/dist/
+.vflow/scripts/node_modules/
+
+# Tauri desktop
+src-tauri/target/
+src-tauri/gen/schemas/
+src-tauri/Cargo.lock
+
+# Desktop runtime secrets / local config (machine-specific, do NOT commit)
+*.secrets.bin
+*.local.json
+secrets.bin
+
+# vflow
+.vflow/proposals/
+.vflow/runtime/
+.vflow/knowledge/

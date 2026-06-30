@@ -1,0 +1,57 @@
+[package]
+name = "notebook-pi-desktop"
+version = "0.1.0"
+description = "NotebookPi desktop client"
+authors = ["NotebookPi"]
+edition = "2021"
+rust-version = "1.77"
+
+[lib]
+name = "notebook_pi_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-global-shortcut = "2"
+tauri-plugin-single-instance = "2"
+tauri-plugin-autostart = "2"
+
+# IPC payloads & runtime
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["rt-multi-thread", "sync", "time", "macros"] }
+async-trait = "0.1"
+anyhow = "1"
+thiserror = "1"
+
+# Storage
+rusqlite = { version = "0.31", features = ["bundled"] }
+r2d2 = "0.8"
+r2d2_sqlite = "0.24"
+
+# Networking
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+
+# Crypto for token-at-rest (AES-GCM, machine-derived key)
+aes-gcm = "0.10"
+hkdf = "0.12"
+sha2 = "0.10"
+rand = "0.8"
+base64 = "0.22"
+hostname = "0.4"
+
+# Logging
+log = "0.4"
+env_logger = "0.11"
+
+# Misc
+once_cell = "1"
+chrono = { version = "0.4", features = ["clock"] }
+url = "2"
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]

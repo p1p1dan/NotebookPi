@@ -1,0 +1,26 @@
+{
+  "problem": "两个相关的 UX 问题:\n1) 新建笔记的目录归属不符合直觉。当前实现 (web/src/app/note-list.ts:142) 仅基于 state.selectedFolderId 决定 targetFolder:'all' -> null(未归类),否则用选中的文件夹 id。这导致在'全部笔记'视图下点新建,新笔记总是落到'未归类',即使用户正在浏览/编辑的笔记明显属于某个文件夹。同样的逻辑也存在于 web/src/app/import-ui.ts:71 的拖拽导入。\n2) 搜索后没有自动预览。当前 (web/src/app/index.ts:78-99) 搜索完成只刷新中间列表,右侧编辑器保持空白或上一篇笔记,用户必须再手动点击一次列表条目才能看到内容。同时即使打开了命中的笔记,编辑器内也不会自动滚动到匹配位置或高亮关键词。",
+  "scope": "前端 web/src/app/* 单点改造,后端 API 不动:\n- web/src/app/note-list.ts: newNote 目录归属 fallback 链\n- web/src/app/import-ui.ts: 拖拽导入复用同一 fallback\n- web/src/app/index.ts: 搜索完成后自动 dispatch note:select 第一条命中,并传递 searchQuery\n- web/src/app/editor.ts: openNote 完成后,根据 searchQuery 在 CodeMirror 中定位首个匹配 -> scroll + selection + 临时 highlight,markdown preview 同步加 <mark> 包裹\n- 不涉及 src-tauri/desktop 端 IPC 协议变化,也不涉及后端 src/routes/* 路由改动。",
+  "constraints": [
+    "保持现有 KISS:不引入新依赖,纯前端 DOM/CodeMirror API 实现",
+    "不破坏'全部笔记'视图下没有 currentNote 时的现有行为(仍落到未归类)",
+    "搜索高亮在切换笔记或清空 searchQuery 时必须自动撤销,不能污染普通编辑态",
+    "IME 输入态、自动保存、移动到文件夹等现有交互必须保留",
+    "首个匹配定位用 case-insensitive 简单 indexOf,不引入正则/FTS 复杂度;后端 FTS5 已经做了模糊匹配,前端只需把 q 当 substring 找一次"
+  ],
+  "investigation": {
+    "current_behavior_problem1": "note-list.ts:140-160 newNote 中 targetFolder = selectedFolderId === 'all' ? null : selectedFolderId。当 selectedFolderId='all' 时 targetFolder=null,新笔记落到未归类;当 selectedFolderId 是具体 number 或 null 时直接透传。问题:'全部笔记'是无文件夹的聚合视图,但用户往往是在该视图下点开某篇笔记后才意识到要新建一篇'同伴笔记',此时 currentNote.folder_id 才是真实的'当前上下文'。",
+    "current_behavior_problem2": "index.ts:78-99 runSearch 拿到 results 后只 emit('notes') 触发中间列重绘。state.currentNote 不变,编辑器壳不动。用户点击列表条目走 note:select -> openNote -> getNote -> 替换 currentNote,renderShell 重建 CodeMirror;但 openNote 内部完全不感知 searchQuery,没有跳转/高亮逻辑。",
+    "files_to_touch": [
+      "web/src/app/note-list.ts",
+      "web/src/app/import-ui.ts",
+      "web/src/app/index.ts",
+      "web/src/app/editor.ts"
+    ],
+    "out_of_scope": [
+      "src-tauri/* (桌面端 IPC)",
+      "src/routes/* (后端 API)",
+      "搜索结果排序/分页/FTS 语法"
+    ]
+  }
+}

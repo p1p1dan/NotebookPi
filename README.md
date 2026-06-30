@@ -213,6 +213,80 @@ docker compose up -d
 
 ---
 
+## 桌面端 (Tauri v2, Windows/Linux)
+
+仓库内的 `src-tauri/` 是把这套笔记本包成离线优先的桌面客户端。整套前端复用，**远端 API 不变，多出一层 Rust 在本地 SQLite 做缓存 + 同步队列**。
+
+### 一次性准备
+
+1. 服务端 `.env` 必须设置 `API_TOKEN`（≥16 字符）。桌面端**只**走 `Authorization: Bearer <token>`，不复用 cookie/密码。
+2. 装 Rust 工具链 (`rustup`)；Linux 还需要 `libwebkit2gtk-4.1-dev libssl-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev`。
+3. 仓库根 `npm install`（首次会下载 `@tauri-apps/cli`）。
+
+### 开发态
+
+```bash
+npm run tauri:dev
+```
+
+`tauri.conf.json` 会自动起 `npm run dev:web`（Vite :5173）并把它套进 Tauri 窗口。Rust 端日志走 stderr。
+
+### 首次运行
+
+1. 主窗口右上角点 ⚙ 打开桌面设置。
+2. 填「服务器地址」+「API Token」+「默认快记文件夹」（默认 `随笔记录/快速记录`，远端不存在会在第一次同步时自动按 `/api/import` 创建）。
+3. 保存后会立即触发一次同步，状态条出现 `● 已同步`。
+4. 快记小窗的全局快捷键是 `Ctrl+Alt+N`（Windows/Linux）。
+
+### 同步状态徽标
+
+笔记列表里每条条目右侧可能出现：
+
+| 徽标 | 含义 |
+| :--- | :--- |
+| 无 | 已同步 |
+| 待新建 | 离线时创建，等待联网 POST `/api/notes` |
+| 待保存 | 离线/失败后修改，等待 PUT `/api/notes/:id` |
+| 待删除 | 离线/失败后删除，等待 DELETE `/api/notes/:id` |
+| 失败 | 重试 8 次仍失败，可在设置抽屉里点「重试失败」 |
+| 冲突 | 远端 `updated_at > 本地 last_synced_at` 且本地仍 dirty（第一版默认保留本地） |
+
+### 打包
+
+```bash
+# Windows (.msi / .exe)
+npm run tauri:build
+
+# Linux (.deb / .AppImage)
+npm run tauri:build
+```
+
+产物落在 `src-tauri/target/release/bundle/`。**图标**默认是 `src-tauri/icons/` 里的占位文件；要发布前先跑 `npx @tauri-apps/cli icon path/to/source.png` 生成正式图标。
+
+### 本地数据位置
+
+| 平台 | 路径 |
+| :--- | :--- |
+| Windows | `%LocalAppData%\com.notebookpi.desktop\` |
+| Linux | `~/.local/share/com.notebookpi.desktop/` |
+
+里面有 `notebookpi.db`（本地缓存）、`device.seed`（机器派生加密种子）、`secrets.bin`（加密后的 API Token）。**不要把这三个文件随仓库提交**——`.gitignore` 已经把 `*.secrets.bin` 加进黑名单。
+
+### 故障排查（桌面端）
+
+**状态条一直显示「未配置」**
+没填服务器地址或 API Token。打开设置抽屉补全。
+
+**「失败 N」越来越大**
+查 `src-tauri` 控制台日志；常见原因：服务端 `API_TOKEN` 不一致、URL 拼错、CORS（自托管反代时把 Bearer header 透传）。点设置抽屉里的「重试失败」会清零 retry_count 重跑队列。
+
+**快记快捷键不响应**
+某些 Linux 桌面环境（如 Wayland + GNOME）需要在系统设置允许全局快捷键；Windows 通常无需额外授权。
+
+---
+
 ## License
 
 MIT
+
+

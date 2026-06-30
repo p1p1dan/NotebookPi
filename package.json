@@ -3,13 +3,16 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Single-user online notebook (Markdown, folders, full-text search)",
+  "description": "Single-user online notebook (Markdown, folders, full-text search) + Tauri desktop shell",
   "scripts": {
-    "start": "node src/server.js",
-    "dev:server": "node --watch src/server.js",
+    "start": "node --env-file-if-exists=.env src/server.js",
+    "dev:server": "node --env-file-if-exists=.env --watch src/server.js",
     "dev:web": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "tauri": "tauri",
+    "tauri:dev": "tauri dev",
+    "tauri:build": "tauri build"
   },
   "engines": {
     "node": ">=20"
@@ -27,6 +30,9 @@
     "@codemirror/state": "^6.4.1",
     "@codemirror/view": "^6.34.1",
     "@tailwindcss/vite": "^4.0.0",
+    "@tauri-apps/api": "^2.1.1",
+    "@tauri-apps/cli": "^2.1.0",
+    "@tauri-apps/plugin-global-shortcut": "^2.0.0",
     "codemirror": "^6.0.1",
     "highlight.js": "^11.10.0",
     "markdown-it": "^14.1.0",

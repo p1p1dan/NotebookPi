@@ -1,0 +1,14 @@
+{
+  "name": "vflow2-scripts",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test --test-concurrency=1 ../tests/proposal-*.test.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^26.0.1",
+    "typescript": "^5.5.0"
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "results": [
+    {
+      "id": "C-001",
+      "passed": true,
+      "evidence": "vite v5.4.21 build success in 2.99s, 163 modules transformed, no TS errors"
+    },
+    {
+      "id": "C-002",
+      "passed": true,
+      "evidence": "note-list.ts:142 uses resolveCreationTarget(); state.ts 新增的函数实现 fallback 链:explicit folder->use it; 'all'+currentNote->currentNote.folder_id; 'all'+no currentNote->null。import-ui.ts:71 同样改为 resolveCreationTarget()。"
+    },
+    {
+      "id": "C-003",
+      "passed": true,
+      "evidence": "index.ts runSearch:results 非空且 currentNote.id !== results[0].id 时 dispatch note:select 自动打开;相同笔记直接 applySearchHighlight;零命中 clearSearchHighlights;空 q 同样 clearSearchHighlights。editor.ts MAX_HITS=200, MIN_QUERY_LEN=2 常量定义,导出 applySearchHighlight/clearSearchHighlights。"
+    },
+    {
+      "id": "C-004",
+      "passed": true,
+      "evidence": "on('currentNote') 重建 cmView 时 Decoration 自然丢弃(EditorState.create 时 searchHighlightField create()=Decoration.none);renderPreview 末尾根据 state.searchQuery 决定是否 markPreviewHits,clearPreviewMarks 后还跑 root.normalize() 合并 textNode;markDirty/saveNow 等编辑路径与高亮模块完全解耦,无新增订阅。"
+    },
+    {
+      "id": "C-005",
+      "passed": true,
+      "evidence": "global.css 同时定义 light 默认色(rgba(217,119,6,0.28))和 :root[data-theme='dark'] 覆盖(rgba(224,138,30,0.32)),outline 同步换色,跟既有 --accent 色系保持一致。"
+    }
+  ],
+  "all_gating_passed": true,
+  "verify_round": 1
+}
