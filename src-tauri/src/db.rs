@@ -16,7 +16,7 @@ use std::path::PathBuf;
 pub type DbPool = Pool<SqliteConnectionManager>;
 pub type PooledConn = r2d2::PooledConnection<SqliteConnectionManager>;
 
-const SCHEMA_VERSION: i32 = 2;
+const SCHEMA_VERSION: i32 = 3;
 
 pub fn open(db_path: &PathBuf) -> Result<DbPool> {
     if let Some(parent) = db_path.parent() {
@@ -50,6 +50,9 @@ fn migrate(conn: &PooledConn) -> Result<()> {
     }
     if v < 2 {
         conn.execute_batch(MIGRATION_V2).context("apply v2 schema")?;
+    }
+    if v < 3 {
+        conn.execute_batch(MIGRATION_V3).context("apply v3 schema")?;
     }
 
     conn.pragma_update(None, "user_version", SCHEMA_VERSION)?;
@@ -111,6 +114,11 @@ CREATE TABLE IF NOT EXISTS settings (
 // the full content is fetched on demand.
 const MIGRATION_V2: &str = r#"
 ALTER TABLE notes ADD COLUMN excerpt TEXT NOT NULL DEFAULT '';
+"#;
+
+// v3: pinned notes sort first in list views.
+const MIGRATION_V3: &str = r#"
+ALTER TABLE notes ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0;
 "#;
 
 pub fn now_ms() -> i64 {

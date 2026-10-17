@@ -8,6 +8,7 @@ pub mod folders;
 pub mod notes;
 pub mod search;
 pub mod settings;
+pub mod shares;
 pub mod sync;
 pub mod window;
 

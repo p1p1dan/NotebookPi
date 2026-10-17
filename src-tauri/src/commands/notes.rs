@@ -46,9 +46,9 @@ pub fn cmd_list_notes(
     let conn = pool.get().map_err(crate::commands::CmdError::from)?;
     let sql = format!(
         "SELECT id, remote_id, folder_remote_id, folder_path, title, content, format,
-              created_at, updated_at, last_synced_at, sync_status, deleted, excerpt
+              created_at, updated_at, last_synced_at, sync_status, deleted, excerpt, pinned
               FROM notes {where_sql}
-             ORDER BY updated_at DESC"
+             ORDER BY pinned DESC, updated_at DESC"
     );
     let mut stmt = conn.prepare(&sql).map_err(crate::commands::CmdError::from)?;
     let binds_ref: Vec<&dyn rusqlite::ToSql> = binds.iter().map(|b| b.as_ref()).collect();
@@ -78,6 +78,7 @@ pub fn cmd_list_notes(
                 last_synced_at: r.get(9)?,
                 sync_status: SyncStatus::from_str_or_synced(&r.get::<_, String>(10)?),
                 deleted: r.get::<_, i64>(11)? != 0,
+                pinned: r.get::<_, i64>(13)? != 0,
             })
         })
         .map_err(crate::commands::CmdError::from)?;
@@ -111,7 +112,7 @@ fn read_full(pool: &DbPool, local_id: i64) -> Result<Note, crate::commands::CmdE
     let conn = pool.get().map_err(crate::commands::CmdError::from)?;
     conn.query_row(
         "SELECT id, remote_id, folder_remote_id, folder_path, title, content, format,
-                created_at, updated_at, last_synced_at, sync_status, deleted
+                created_at, updated_at, last_synced_at, sync_status, deleted, pinned
             FROM notes WHERE id=?1",
         params![local_id],
         |r| {
@@ -128,6 +129,7 @@ fn read_full(pool: &DbPool, local_id: i64) -> Result<Note, crate::commands::CmdE
                 last_synced_at: r.get(9)?,
                 sync_status: SyncStatus::from_str_or_synced(&r.get::<_, String>(10)?),
                 deleted: r.get::<_, i64>(11)? != 0,
+                pinned: r.get::<_, i64>(12)? != 0,
             })
         },
     )
@@ -236,14 +238,22 @@ pub async fn cmd_update_note(
         sets.push("folder_remote_id=?");
         binds.push(Box::new(folder));
     }
+    // Pinning alone isn't an edit: it must not reorder the note by recency.
+    let edits_content = !sets.is_empty();
+    if let Some(p) = patch.pinned {
+        sets.push("pinned=?");
+        binds.push(Box::new(p));
+    }
     if sets.is_empty() {
         return Ok(read_full(&pool, local_id)?);
     }
-    sets.push("updated_at=?");
-    binds.push(Box::new(now));
-    sets.push(
-        "sync_status=CASE WHEN sync_status='pending_create' THEN 'pending_create' ELSE 'pending_update' END",
-    );
+    if edits_content {
+        sets.push("updated_at=?");
+        binds.push(Box::new(now));
+        sets.push(
+            "sync_status=CASE WHEN sync_status='pending_create' THEN 'pending_create' ELSE 'pending_update' END",
+        );
+    }
 
     let sql = format!(
         "UPDATE notes SET {} WHERE id=?",
@@ -255,6 +265,27 @@ pub async fn cmd_update_note(
     let binds_ref: Vec<&dyn rusqlite::ToSql> = binds.iter().map(|b| b.as_ref()).collect();
     conn.execute(&sql, binds_ref.as_slice())
         .map_err(crate::commands::CmdError::from)?;
+
+    // Pin-only changes get their own op that sends just the flag: the list-view cache may
+    // hold stale content, and a full-snapshot update would overwrite newer server edits.
+    if !edits_content {
+        conn.execute(
+            "INSERT INTO sync_queue(operation, note_local_id, remote_id, payload_json,
+                                     status, retry_count, last_error, next_attempt_at,
+                                     created_at, updated_at)
+             SELECT 'pin', ?1, remote_id, '{}', 'pending', 0, NULL, 0, ?2, ?2
+               FROM notes
+              WHERE id=?1
+                AND NOT EXISTS (SELECT 1 FROM sync_queue
+                                 WHERE note_local_id=?1 AND operation='pin' AND status='pending')",
+            params![local_id, now],
+        )
+        .map_err(crate::commands::CmdError::from)?;
+        state.engine.kicker.notify_one();
+        let n = read_full(&pool, local_id)?;
+        let _ = app.emit("notebookpi://notes-changed", &local_id);
+        return Ok(n);
+    }
 
     // Enqueue (skip if a pending_create or earlier pending_update is still in flight).
     let needs_queue: bool = conn
@@ -319,11 +350,11 @@ pub async fn cmd_delete_note(
     )
     .map_err(crate::commands::CmdError::from)?;
 
-    // Cancel any in-flight create/update for this note.
+    // Cancel any in-flight create/update/pin for this note.
     conn.execute(
         "UPDATE sync_queue
             SET status='done', updated_at=?1, last_error='superseded by delete'
-          WHERE note_local_id=?2 AND status='pending' AND operation IN ('create','update')",
+          WHERE note_local_id=?2 AND status='pending' AND operation IN ('create','update','pin')",
         params![now, local_id],
     )
     .map_err(crate::commands::CmdError::from)?;

@@ -30,6 +30,7 @@ export interface NoteLite {
   excerpt?: string;
   created_at: number;
   updated_at: number;
+  pinned?: boolean;
   /** desktop-only */
   sync_status?: SyncStatus;
   /** desktop-only: present once create has been accepted by server */
@@ -41,6 +42,12 @@ export interface Note extends NoteLite {
 }
 
 export type FolderId = number | null | 'all';
+
+export interface ShareInfo {
+  token: string;
+  url: string;
+  created_at: number;
+}
 
 export interface SearchResult {
   id: number;

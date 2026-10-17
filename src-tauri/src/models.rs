@@ -92,6 +92,7 @@ pub struct NoteLite {
     pub last_synced_at: Option<i64>,
     pub sync_status: SyncStatus,
     pub deleted: bool,
+    pub pinned: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -108,6 +109,7 @@ pub struct Note {
     pub last_synced_at: Option<i64>,
     pub sync_status: SyncStatus,
     pub deleted: bool,
+    pub pinned: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -179,6 +181,7 @@ pub struct UpdateNoteInput {
     /// 用 deserialize_some 强制:字段存在(无论值)就包一层 Some。
     #[serde(default, deserialize_with = "deserialize_some")]
     pub folder_remote_id: Option<Option<i64>>, // Some(None) = move to root
+    pub pinned: Option<bool>,
 }
 
 /// serde double-Option pattern:任意出现的字段(含 null)都包一层 Some。

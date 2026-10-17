@@ -80,5 +80,8 @@ const cols = db.prepare("PRAGMA table_info(notes)").all().map(r => r.name);
 if (!cols.includes('format')) {
   db.exec(`ALTER TABLE notes ADD COLUMN format TEXT NOT NULL DEFAULT 'txt'`);
 }
+if (!cols.includes('pinned')) {
+  db.exec(`ALTER TABLE notes ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0`);
+}
 
 export const now = () => Date.now();

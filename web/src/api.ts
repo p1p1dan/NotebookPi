@@ -12,6 +12,7 @@ import type {
   SearchResult,
   NoteVersion,
   NoteVersionFull,
+  ShareInfo,
 } from './types';
 
 type Method = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
@@ -73,7 +74,7 @@ export interface ApiAdapter {
   ) => Promise<{ note: Note }>;
   updateNote: (
     id: number,
-    patch: Partial<Pick<Note, 'title' | 'content' | 'folder_id' | 'format'>>,
+    patch: Partial<Pick<Note, 'title' | 'content' | 'folder_id' | 'format' | 'pinned'>>,
   ) => Promise<{ note: Note }>;
   deleteNote: (id: number) => Promise<{ ok: true }>;
   // search
@@ -82,7 +83,14 @@ export interface ApiAdapter {
   listVersions: (noteId: number) => Promise<{ versions: NoteVersion[] }>;
   getVersion: (noteId: number, vid: number) => Promise<{ version: NoteVersionFull }>;
   restoreVersion: (noteId: number, vid: number) => Promise<{ note: Note }>;
+  // shares (desktop proxies through the server; needs the note to be synced)
+  getShare: (noteId: number) => Promise<{ share: ShareInfo | null }>;
+  createShare: (noteId: number) => Promise<{ share: ShareInfo }>;
+  revokeShare: (noteId: number) => Promise<{ ok: true }>;
 }
+
+type RawShare = { token: string; created_at: number };
+const withUrl = (s: RawShare): ShareInfo => ({ ...s, url: `${location.origin}/s/${s.token}` });
 
 export const browserApi: ApiAdapter = {
   // --- auth ---
@@ -125,6 +133,17 @@ export const browserApi: ApiAdapter = {
     request<{ version: NoteVersionFull }>('GET', `/api/notes/${noteId}/versions/${vid}`),
   restoreVersion: (noteId, vid) =>
     request<{ note: Note }>('POST', `/api/notes/${noteId}/versions/${vid}/restore`),
+
+  // --- shares ---
+  getShare: async (noteId) => {
+    const { share } = await request<{ share: RawShare | null }>('GET', `/api/notes/${noteId}/share`);
+    return { share: share && withUrl(share) };
+  },
+  createShare: async (noteId) => {
+    const { share } = await request<{ share: RawShare }>('POST', `/api/notes/${noteId}/share`);
+    return { share: withUrl(share) };
+  },
+  revokeShare: (noteId) => request<{ ok: true }>('DELETE', `/api/notes/${noteId}/share`),
 };
 
 // Default export is mutable: runtime.ts swaps it before main.ts boot completes.

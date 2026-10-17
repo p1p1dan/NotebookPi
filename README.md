@@ -46,6 +46,8 @@ docker compose up -d --build
 - 多级文件夹，拖拽 `.txt / .md` 文件直接导入到当前文件夹
 - 全文搜索（中英文，FTS5 trigram + 短词 LIKE 兜底，命中词 `<mark>` 高亮）
 - **版本历史**：每次保存且内容变化时自动留存，每篇最多 50 版可回溯
+- **笔记置顶**：置顶笔记在文件夹 / 全部笔记视图中排在最前（搜索结果仍按相关度）
+- **分享链接**：为笔记生成只读链接（`/s/<token>`），无需登录即可查看，可随时撤销
 - 明 / 暗主题，IME 安全的标题输入，自动保存（停止输入 2 秒）
 - 移动端 < 768px 自动单栏堆叠
 - 单文件 SQLite，单容器，零外部依赖
@@ -99,18 +101,23 @@ curl -X POST http://<server>:8454/api/import \
 | 新建文件夹 | `POST /api/folders` | `{ parent_id?, name }` |
 | 改名 / 移动 | `PATCH /api/folders/:id` | `{ name?, parent_id? }` |
 | 删除（含子文件夹，笔记落到未归类） | `DELETE /api/folders/:id` | — |
-| 列笔记（轻量，含 240 字摘要） | `GET  /api/notes` | `?folder_id=<id\|null\|all>` |
+| 列笔记（轻量，含 240 字摘要，置顶优先） | `GET  /api/notes` | `?folder_id=<id\|null\|all>` |
 | 取笔记完整内容 | `GET  /api/notes/:id` | — |
-| 新建笔记 | `POST /api/notes` | `{ folder_id?, title?, content?, format? }` |
-| 修改笔记 | `PUT  /api/notes/:id` | `{ title?, content?, format?, folder_id? }` |
+| 新建笔记 | `POST /api/notes` | `{ folder_id?, title?, content?, format?, pinned? }` |
+| 修改笔记 | `PUT  /api/notes/:id` | `{ title?, content?, format?, folder_id?, pinned? }` |
 | 删除笔记 | `DELETE /api/notes/:id` | — |
 | 全文搜索 | `GET  /api/search` | `?q=<query>` |
 | 版本列表 | `GET  /api/notes/:id/versions` | — |
 | 版本详情 | `GET  /api/notes/:id/versions/:vid` | — |
 | 恢复到指定版本 | `POST /api/notes/:id/versions/:vid/restore` | — |
+| 查看分享链接（无则 `share: null`） | `GET  /api/notes/:id/share` | — |
+| 生成分享链接（已有则返回原链接） | `POST /api/notes/:id/share` | — |
+| 撤销分享 | `DELETE /api/notes/:id/share` | — |
+| 读取分享内容（无需鉴权） | `GET  /api/public/shares/:token` | — |
 | 健康检查（无需鉴权） | `GET  /api/health` | — |
 
-`format` 取值：`"txt"`（默认）或 `"md"`。
+`format` 取值：`"txt"`（默认）或 `"md"`。`pinned` 为布尔值；只改 `pinned` 不会更新 `updated_at`。
+分享页地址为 `http://<server>:8454/s/<token>`，删除笔记或撤销后链接立即失效。
 
 ---
 

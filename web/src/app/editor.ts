@@ -3,41 +3,17 @@
 import { state, emit, on, setMobilePane } from './state';
 import { api, ApiError } from '../api';
 import { icons } from '../icons';
-import { debounce, wordCount } from '../util';
+import { debounce, escapeHtml, wordCount } from '../util';
 import { toast } from './toast';
 import { openHistory } from './history';
-import type { NoteFormat } from '../types';
+import type { NoteFormat, ShareInfo } from '../types';
 
 import { EditorView, keymap, drawSelection, dropCursor, Decoration, type DecorationSet } from '@codemirror/view';
 import { Compartment, EditorState, StateEffect, StateField, RangeSetBuilder } from '@codemirror/state';
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands';
 import { markdown } from '@codemirror/lang-markdown';
 
-import MarkdownIt from 'markdown-it';
-import hljs from 'highlight.js/lib/common';
-
-// ---------- Markdown renderer (singleton) ----------
-const md = new MarkdownIt({
-  html: false,
-  linkify: true,
-  breaks: true,
-  highlight(str, lang) {
-    if (lang && hljs.getLanguage(lang)) {
-      try {
-        return `<pre><code class="hljs language-${lang}">${hljs.highlight(str, { language: lang, ignoreIllegals: true }).value}</code></pre>`;
-      } catch { /* fall through */ }
-    }
-    return `<pre><code class="hljs">${md.utils.escapeHtml(str)}</code></pre>`;
-  },
-});
-const defaultLinkRender = md.renderer.rules.link_open ??
-  ((tokens, idx, opts, _env, self) => self.renderToken(tokens, idx, opts));
-md.renderer.rules.link_open = (tokens, idx, opts, env, self) => {
-  const t = tokens[idx]!;
-  t.attrSet('target', '_blank');
-  t.attrSet('rel', 'noopener noreferrer');
-  return defaultLinkRender(tokens, idx, opts, env, self);
-};
+import { md } from '../markdown';
 
 // ---------- Editor module ----------
 const langCompartment = new Compartment();
@@ -113,7 +89,7 @@ function renderShell(root: HTMLElement) {
       <button class="btn-icon" id="btn-move"    title="移动到文件夹">${icons.folder}</button>
       <button class="btn-icon" id="btn-save"    title="保存 (Ctrl+S)">${icons.save ?? icons.download}</button>
       <button class="btn-icon" id="btn-export"  title="导出">${icons.download}</button>
-      <button class="btn-icon" id="btn-share"   title="生成分享链接（Step 4）">${icons.share}</button>
+      <button class="btn-icon" id="btn-share"   title="分享链接">${icons.share}</button>
       <button class="btn-icon" id="btn-history" title="版本历史">${icons.history}</button>
       <button class="btn-icon danger" id="btn-delete" title="删除笔记">${icons.trashLg}</button>
     </div>
@@ -171,7 +147,9 @@ function renderShell(root: HTMLElement) {
     void saveNow();
   });
   root.querySelector('#btn-export')!.addEventListener('click', exportNote);
-  root.querySelector('#btn-share')!.addEventListener('click', () => toast('分享链接将在 Step 4 上线', 'info'));
+  root.querySelector('#btn-share')!.addEventListener('click', (e) => {
+    void openSharePopover(e.currentTarget as HTMLElement);
+  });
   root.querySelector('#btn-history')!.addEventListener('click', () => {
     if (!state.currentNote) return;
     // flush any pending save first so the latest version is in history
@@ -414,27 +392,7 @@ function openMovePopover(anchor: HTMLElement) {
       return `<button class="mv-item ${cur ? 'is-current' : ''}" data-target="${it.id ?? 'null'}" style="padding-left:${10 + indent}px">${safe(it.label)}${cur ? ' ✓' : ''}</button>`;
     }).join('')}
   `;
-  document.body.appendChild(pop);
-
-  // 定位
-  const r = anchor.getBoundingClientRect();
-  const popRect = pop.getBoundingClientRect();
-  let left = r.right - popRect.width;
-  if (left < 8) left = 8;
-  let top = r.bottom + 6;
-  if (top + popRect.height > window.innerHeight - 8) top = Math.max(8, r.top - popRect.height - 6);
-  pop.style.left = `${left}px`;
-  pop.style.top = `${top}px`;
-
-  const close = () => {
-    pop.remove();
-    document.removeEventListener('click', onDocClick, true);
-    document.removeEventListener('keydown', onKey, true);
-  };
-  const onDocClick = (e: MouseEvent) => {
-    if (!pop.contains(e.target as Node) && e.target !== anchor && !anchor.contains(e.target as Node)) close();
-  };
-  const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') close(); };
+  const { close } = attachPopover(pop, anchor);
 
   pop.addEventListener('click', async (e) => {
     const b = (e.target as HTMLElement).closest<HTMLButtonElement>('[data-target]');
@@ -445,10 +403,140 @@ function openMovePopover(anchor: HTMLElement) {
     close();
     void moveCurrentTo(target);
   });
+}
+
+/// 挂到 body,定位到 anchor 下方(放不下则翻到上方),点外部 / Esc 关闭。
+/// 内容异步变化后调用 place() 重新定位。
+function attachPopover(pop: HTMLElement, anchor: HTMLElement) {
+  document.body.appendChild(pop);
+  const place = () => {
+    const r = anchor.getBoundingClientRect();
+    const popRect = pop.getBoundingClientRect();
+    let left = r.right - popRect.width;
+    if (left < 8) left = 8;
+    let top = r.bottom + 6;
+    if (top + popRect.height > window.innerHeight - 8) top = Math.max(8, r.top - popRect.height - 6);
+    pop.style.left = `${left}px`;
+    pop.style.top = `${top}px`;
+  };
+  place();
+
+  const close = () => {
+    pop.remove();
+    document.removeEventListener('click', onDocClick, true);
+    document.removeEventListener('keydown', onKey, true);
+  };
+  const onDocClick = (e: MouseEvent) => {
+    if (!pop.isConnected) return close();
+    if (!pop.contains(e.target as Node) && e.target !== anchor && !anchor.contains(e.target as Node)) close();
+  };
+  const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') close(); };
   setTimeout(() => {
     document.addEventListener('click', onDocClick, true);
     document.addEventListener('keydown', onKey, true);
   }, 0);
+  return { close, place };
+}
+
+// ---------- Share ----------
+
+function shareErrorText(e: unknown): string {
+  const msg = String((e as any)?.message ?? e ?? '');
+  if (msg.includes('not_synced')) return '笔记尚未同步到服务器，同步完成后才能分享';
+  if (msg.includes('not configured')) return '尚未配置服务器地址或令牌';
+  if (e instanceof ApiError && e.status === 404) return '笔记不存在';
+  return '无法连接服务器，请稍后重试';
+}
+
+async function copyText(text: string, fallbackInput: HTMLInputElement | null): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    if (!fallbackInput) return false;
+    fallbackInput.select();
+    return document.execCommand('copy');
+  }
+}
+
+async function openSharePopover(anchor: HTMLElement) {
+  const n = state.currentNote;
+  if (!n) return;
+
+  const existing = document.getElementById('share-pop');
+  if (existing) { existing.remove(); return; }
+
+  const noteId = n.id;
+  const pop = document.createElement('div');
+  pop.id = 'share-pop';
+  pop.className = 'move-popover share-popover';
+  pop.innerHTML = `<div class="mv-title">分享</div><div class="share-pop-body">加载中…</div>`;
+  const body = pop.querySelector<HTMLElement>('.share-pop-body')!;
+  const { place } = attachPopover(pop, anchor);
+
+  let busy = false;
+  const render = (share: ShareInfo | null) => {
+    body.innerHTML = share
+      ? `
+        <input class="share-pop-url" readonly value="${escapeHtml(share.url)}" />
+        <div class="share-pop-actions">
+          <button class="btn btn-primary btn-sm" data-share="copy">复制链接</button>
+          <button class="btn btn-sm btn-danger" data-share="revoke">撤销分享</button>
+        </div>
+        <div class="share-pop-hint">拿到链接的任何人都能只读查看此笔记</div>`
+      : `
+        <div class="share-pop-hint">生成只读链接，拿到链接的任何人都能查看此笔记</div>
+        <div class="share-pop-actions">
+          <button class="btn btn-primary btn-sm" data-share="create">生成分享链接</button>
+        </div>`;
+    place();
+  };
+  const fail = (e: unknown) => {
+    body.innerHTML = `<div class="share-pop-hint">${escapeHtml(shareErrorText(e))}</div>`;
+    place();
+  };
+
+  pop.addEventListener('click', async (e) => {
+    const b = (e.target as HTMLElement).closest<HTMLButtonElement>('[data-share]');
+    if (!b || busy) return;
+    busy = true;
+    try {
+      const urlInput = pop.querySelector<HTMLInputElement>('.share-pop-url');
+      switch (b.dataset.share) {
+        case 'create': {
+          // 分享页读的是服务器上的内容,先把未保存的改动落盘
+          debouncedSave.flush();
+          const { share } = await api.createShare(noteId);
+          render(share);
+          const ok = await copyText(share.url, pop.querySelector('.share-pop-url'));
+          toast(ok ? '分享链接已复制' : '分享链接已生成', 'info');
+          break;
+        }
+        case 'copy': {
+          const ok = urlInput ? await copyText(urlInput.value, urlInput) : false;
+          toast(ok ? '链接已复制' : '复制失败，请手动复制', ok ? 'info' : 'error');
+          break;
+        }
+        case 'revoke': {
+          await api.revokeShare(noteId);
+          render(null);
+          toast('分享已撤销，原链接失效', 'info');
+          break;
+        }
+      }
+    } catch (err) {
+      fail(err);
+    } finally {
+      busy = false;
+    }
+  });
+
+  try {
+    const { share } = await api.getShare(noteId);
+    if (pop.isConnected) render(share);
+  } catch (err) {
+    if (pop.isConnected) fail(err);
+  }
 }
 
 async function moveCurrentTo(folder_id: number | null) {

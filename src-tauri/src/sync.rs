@@ -4,6 +4,7 @@
 //   pending_create  -- POST  /api/notes  --> synced (with remote_id)
 //   pending_update  -- PUT   /api/notes/:id --> synced
 //   pending_delete  -- DEL   /api/notes/:id --> hard-deleted locally
+//   (pin toggles don't change sync_status: a 'pin' queue op PUTs only { pinned })
 //   conflict        -- user resolves manually (out of scope for v1 worker)
 //
 // Queue items mirror these operations and carry their own retry counter so
@@ -215,6 +216,7 @@ impl Engine {
             "create" => self.exec_create(client, item).await,
             "update" => self.exec_update(client, item).await,
             "delete" => self.exec_delete(client, item).await,
+            "pin" => self.exec_pin(client, item).await,
             other => Err(anyhow::anyhow!("unknown op {other}")),
         }
     }
@@ -232,10 +234,24 @@ impl Engine {
             conn.execute("DELETE FROM notes WHERE id=?1", params![local_id])?;
             return Ok(());
         }
-        let folder_id = self.resolve_folder(client, snap.folder_path.as_deref()).await?;
-        let remote = client
-            .create_note(folder_id, &snap.title, &snap.content, snap.format)
-            .await?;
+        // UI-created notes carry folder_remote_id only; quick notes carry folder_path only.
+        let folder_id = match snap.folder_remote_id {
+            Some(id) => Some(id),
+            None => self.resolve_folder(client, snap.folder_path.as_deref()).await?,
+        };
+        let remote = match client
+            .create_note(folder_id, &snap.title, &snap.content, snap.format, snap.pinned)
+            .await
+        {
+            // Folder was deleted server-side before this create ran: file it as unfiled
+            // instead of retrying forever.
+            Err(ApiError::Server { status: 400, code }) if code == "folder_not_found" => {
+                client
+                    .create_note(None, &snap.title, &snap.content, snap.format, snap.pinned)
+                    .await?
+            }
+            other => other?,
+        };
         // Save remote_id, clear pending status.
         let conn = self.pool.get()?;
         conn.execute(
@@ -272,6 +288,7 @@ impl Engine {
             "content": snap.content,
             "format": snap.format.as_str(),
             "folder_id": snap.folder_remote_id,
+            "pinned": snap.pinned,
         });
         let _ = client.update_note(remote_id, &patch).await?;
         let conn = self.pool.get()?;
@@ -282,6 +299,30 @@ impl Engine {
             params![now_ms(), local_id],
         )?;
         Ok(())
+    }
+
+    async fn exec_pin(&self, client: &ApiClient, item: &QueueItem) -> Result<()> {
+        let local_id = item.note_local_id.context("pin needs local_id")?;
+        // Read the flag at run time so repeated toggles collapse into the latest state.
+        let row: Option<(Option<i64>, bool)> = {
+            let conn = self.pool.get()?;
+            conn.query_row(
+                "SELECT remote_id, pinned FROM notes WHERE id=?1",
+                params![local_id],
+                |r| Ok((r.get(0)?, r.get::<_, i64>(1)? != 0)),
+            )
+            .ok()
+        };
+        let Some((remote_id, pinned)) = row else { return Ok(()) };
+        // No remote_id yet: the pending create carries `pinned` itself.
+        let Some(remote_id) = remote_id.or(item.remote_id) else { return Ok(()) };
+        match client
+            .update_note(remote_id, &serde_json::json!({ "pinned": pinned }))
+            .await
+        {
+            Ok(_) | Err(ApiError::Server { status: 404, .. }) => Ok(()),
+            Err(e) => Err(e.into()),
+        }
     }
 
     async fn exec_delete(&self, client: &ApiClient, item: &QueueItem) -> Result<()> {
@@ -376,12 +417,13 @@ struct NoteSnapshot {
     title: String,
     content: String,
     format: NoteFormat,
+    pinned: bool,
     deleted: bool,
 }
 
 fn load_note_snapshot(conn: &PooledConn, local_id: i64) -> Result<NoteSnapshot> {
     let mut stmt = conn.prepare(
-        "SELECT remote_id, folder_remote_id, folder_path, title, content, format, deleted
+        "SELECT remote_id, folder_remote_id, folder_path, title, content, format, deleted, pinned
             FROM notes WHERE id=?1",
     )?;
     let row = stmt.query_row(params![local_id], |r| {
@@ -393,6 +435,7 @@ fn load_note_snapshot(conn: &PooledConn, local_id: i64) -> Result<NoteSnapshot> 
             content: r.get(4)?,
             format: NoteFormat::from_str_or_default(&r.get::<_, String>(5)?),
             deleted: r.get::<_, i64>(6)? != 0,
+            pinned: r.get::<_, i64>(7)? != 0,
         })
     })?;
     Ok(row)
@@ -474,14 +517,25 @@ fn upsert_notes_lite(conn: &PooledConn, remote: &[RemoteNoteLite]) -> Result<()>
             .ok();
         if let Some(ts) = local_synced_at {
             if n.updated_at <= ts {
+                // Pinning doesn't bump updated_at server-side, so carry it over here
+                // unless a local pin toggle is still waiting to be pushed.
+                conn.execute(
+                    "UPDATE notes SET pinned=?1
+                      WHERE remote_id=?2
+                        AND NOT EXISTS (SELECT 1 FROM sync_queue q
+                                         WHERE q.note_local_id = notes.id AND q.operation = 'pin'
+                                           AND q.status IN ('pending','running'))",
+                    params![n.pinned, n.id],
+                )?;
                 continue;
             }
         }
         conn.execute(
             "INSERT INTO notes(remote_id, folder_remote_id, title, content, format,
-                                 created_at, updated_at, last_synced_at, sync_status, deleted, excerpt)
+                                 created_at, updated_at, last_synced_at, sync_status, deleted, excerpt,
+                                 pinned)
              VALUES (?1, ?2, ?3, COALESCE((SELECT content FROM notes WHERE remote_id=?1), ''),
-                     ?4, ?5, ?6, ?7, 'synced', 0, ?8)
+                     ?4, ?5, ?6, ?7, 'synced', 0, ?8, ?9)
              ON CONFLICT(remote_id) DO UPDATE SET
                 folder_remote_id = excluded.folder_remote_id,
                 title = excluded.title,
@@ -490,7 +544,11 @@ fn upsert_notes_lite(conn: &PooledConn, remote: &[RemoteNoteLite]) -> Result<()>
                 last_synced_at = excluded.last_synced_at,
                 sync_status = 'synced',
                 deleted = 0,
-                excerpt = excluded.excerpt",
+                excerpt = excluded.excerpt,
+                pinned = CASE WHEN EXISTS (SELECT 1 FROM sync_queue q
+                                            WHERE q.note_local_id = notes.id AND q.operation = 'pin'
+                                              AND q.status IN ('pending','running'))
+                              THEN notes.pinned ELSE excluded.pinned END",
             params![
                 n.id,
                 n.folder_id,
@@ -499,7 +557,8 @@ fn upsert_notes_lite(conn: &PooledConn, remote: &[RemoteNoteLite]) -> Result<()>
                 n.created_at,
                 n.updated_at,
                 now,
-                n.excerpt.as_deref().unwrap_or("")
+                n.excerpt.as_deref().unwrap_or(""),
+                n.pinned
             ],
         )?;
     }
@@ -513,8 +572,9 @@ pub fn upsert_note_full(conn: &PooledConn, n: &RemoteNote) -> Result<()> {
     let excerpt: String = n.content.chars().take(240).collect();
     conn.execute(
         "INSERT INTO notes(remote_id, folder_remote_id, title, content, format,
-                             created_at, updated_at, last_synced_at, sync_status, deleted, excerpt)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 'synced', 0, ?9)
+                             created_at, updated_at, last_synced_at, sync_status, deleted, excerpt,
+                             pinned)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 'synced', 0, ?9, ?10)
          ON CONFLICT(remote_id) DO UPDATE SET
             folder_remote_id = excluded.folder_remote_id,
             title = excluded.title,
@@ -524,7 +584,11 @@ pub fn upsert_note_full(conn: &PooledConn, n: &RemoteNote) -> Result<()> {
             last_synced_at = excluded.last_synced_at,
             sync_status = 'synced',
             deleted = 0,
-            excerpt = excluded.excerpt",
+            excerpt = excluded.excerpt,
+            pinned = CASE WHEN EXISTS (SELECT 1 FROM sync_queue q
+                                        WHERE q.note_local_id = notes.id AND q.operation = 'pin'
+                                          AND q.status IN ('pending','running'))
+                          THEN notes.pinned ELSE excluded.pinned END",
         params![
             n.id,
             n.folder_id,
@@ -534,7 +598,8 @@ pub fn upsert_note_full(conn: &PooledConn, n: &RemoteNote) -> Result<()> {
             n.created_at,
             n.updated_at,
             now,
-            excerpt
+            excerpt,
+            n.pinned
         ],
     )?;
     Ok(())

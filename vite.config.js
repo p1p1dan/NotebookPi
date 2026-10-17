@@ -8,8 +8,9 @@ import { resolve } from 'node:path';
 // Multi-page setup:
 // - index.html        → main app shell (also served by Fastify in browser deploys)
 // - quick-note.html   → desktop quick-note popup window (loaded by Tauri)
+// - share.html        → public read-only page served by Fastify at /s/:token
 //
-// Both end up under public/ after build, and Tauri picks them up from frontendDist.
+// All end up under public/ after build, and Tauri picks them up from frontendDist.
 export default defineConfig({
   root: 'web',
   publicDir: false,
@@ -26,6 +27,7 @@ export default defineConfig({
       input: {
         main: resolve(import.meta.dirname, 'web/index.html'),
         quickNote: resolve(import.meta.dirname, 'web/quick-note.html'),
+        share: resolve(import.meta.dirname, 'web/share.html'),
       },
     },
   },

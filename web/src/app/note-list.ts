@@ -19,6 +19,8 @@ export function mountNoteList(root: HTMLElement) {
     const t = e.target as HTMLElement;
     if (t.closest('[data-action="new-note"]')) return await newNote(t.closest<HTMLElement>('[data-action="new-note"]'));
     if (t.closest('[data-action="import"]'))   return pickAndImportFiles();
+    const pin = t.closest<HTMLElement>('[data-action="pin"]');
+    if (pin) return await togglePin(Number(pin.dataset.id));
     const card = t.closest<HTMLElement>('[data-note-id]');
     if (card) {
       const id = Number(card.dataset.noteId);
@@ -55,8 +57,14 @@ function buildFolder(): string {
         </button>
       </div>
     </div>
-    ${count === 0 ? renderFolderEmpty() : state.notes.map(renderFolderCard).join('')}
+    ${count === 0 ? renderFolderEmpty() : sortedNotes().map(renderFolderCard).join('')}
   `;
+}
+
+// Local edits reorder state.notes by recency; keep pinned notes on top regardless.
+function sortedNotes(): NoteLite[] {
+  return [...state.notes].sort((a, b) =>
+    Number(!!b.pinned) - Number(!!a.pinned) || b.updated_at - a.updated_at);
 }
 
 function renderFolderEmpty(): string {
@@ -76,10 +84,11 @@ function renderFolderCard(n: NoteLite): string {
   const title = n.title.trim() || '无标题';
   const excerpt = makeExcerpt(n.excerpt || '', 120) || '空笔记';
   return `
-    <div class="note-card ${active ? 'is-active' : ''}" data-note-id="${n.id}">
+    <div class="note-card ${active ? 'is-active' : ''} ${n.pinned ? 'is-pinned' : ''}" data-note-id="${n.id}">
       <div class="note-title">
         <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(title)}</span>
         ${unsaved ? '<span class="dot-unsaved" title="未保存"></span>' : ''}
+        <button class="btn-icon note-pin" data-action="pin" data-id="${n.id}" title="${n.pinned ? '取消置顶' : '置顶'}">${icons.pin}</button>
       </div>
       <div class="note-excerpt">${escapeHtml(excerpt)}</div>
       <div class="note-meta">${timeAgo(n.updated_at)}</div>
@@ -136,6 +145,19 @@ function sanitizeSnippet(s: string): string {
 }
 
 // ----- Actions -----
+
+async function togglePin(id: number) {
+  const n = state.notes.find(x => x.id === id);
+  if (!n) return;
+  try {
+    const { note } = await api.updateNote(id, { pinned: !n.pinned });
+    n.pinned = note.pinned;
+    if (state.currentNote?.id === id) state.currentNote.pinned = note.pinned;
+    emit('notes');
+  } catch {
+    toast(n.pinned ? '取消置顶失败' : '置顶失败', 'error');
+  }
+}
 
 async function newNote(anchor: HTMLElement | null) {
   // 走统一的 fallback 链:明确选中的文件夹 > "全部笔记"下当前打开笔记所在文件夹 > 未归类

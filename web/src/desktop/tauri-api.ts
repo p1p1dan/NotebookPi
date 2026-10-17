@@ -16,6 +16,7 @@ import type {
   DesktopSettings,
   NoteVersion,
   NoteVersionFull,
+  ShareInfo,
 } from '../types';
 
 // ---- Rust shape adapters ----
@@ -45,6 +46,7 @@ function toNoteLite(r: any): NoteLite {
     excerpt: r.excerpt ?? '',
     created_at: r.created_at,
     updated_at: r.updated_at,
+    pinned: !!r.pinned,
     sync_status: r.sync_status,
     remote_id: r.remote_id,
   };
@@ -59,6 +61,7 @@ function toNote(r: any): Note {
     format: (r.format as NoteFormat) ?? 'txt',
     created_at: r.created_at,
     updated_at: r.updated_at,
+    pinned: !!r.pinned,
     sync_status: r.sync_status,
     remote_id: r.remote_id,
   };
@@ -140,6 +143,9 @@ export const tauriApi: ApiAdapter = {
     if (patch.folder_id !== undefined) {
       payload.folder_remote_id = patch.folder_id;
     }
+    if (patch.pinned !== undefined) {
+      payload.pinned = patch.pinned;
+    }
     const note = await invoke<any>('cmd_update_note', { localId, patch: payload });
     return { note: toNote(note) };
   },
@@ -166,6 +172,20 @@ export const tauriApi: ApiAdapter = {
   restoreVersion: async (noteId, vid) => {
     const note = await invoke<any>('cmd_restore_version', { noteId, vid });
     return { note: toNote(note) };
+  },
+
+  // ---- shares: 走 Rust 代理到远端,链接用配置的服务器地址拼接 ----
+  getShare: async (noteId) => {
+    const share = await invoke<ShareInfo | null>('cmd_get_share', { noteId });
+    return { share };
+  },
+  createShare: async (noteId) => {
+    const share = await invoke<ShareInfo>('cmd_create_share', { noteId });
+    return { share };
+  },
+  revokeShare: async (noteId) => {
+    await invoke<void>('cmd_revoke_share', { noteId });
+    return { ok: true };
   },
 };
 

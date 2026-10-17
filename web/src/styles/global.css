@@ -203,6 +203,15 @@ a { color: inherit; }
 .move-popover .mv-item.is-current:hover { background: transparent; }
 .move-popover .mv-divider { height: 1px; background: var(--border, #eee); margin: 4px 0; }
 .move-popover .mv-title { padding: 4px 10px; font-size: 11px; color: var(--muted-fg, #888); text-transform: uppercase; letter-spacing: .05em; }
+.share-popover { width: 320px; }
+.share-pop-body { padding: 4px 10px 8px; display: flex; flex-direction: column; gap: 8px; font-size: 13px; }
+.share-pop-url {
+  width: 100%; box-sizing: border-box; padding: 6px 8px;
+  border: 1px solid var(--border); border-radius: 6px; background: var(--muted);
+  font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 12px;
+}
+.share-pop-actions { display: flex; gap: 6px; }
+.share-pop-hint { font-size: 12px; color: var(--muted-fg); }
 
 .tree-empty {
   padding: 16px 10px; color: var(--muted-fg); font-size: 12.5px; text-align: center;
@@ -260,6 +269,18 @@ a { color: inherit; }
   background: var(--accent);
   display: inline-block; margin-left: 6px;
   flex: none;
+}
+.note-pin {
+  width: 22px; height: 22px; margin-left: auto; flex: none;
+  color: var(--muted-fg);
+  visibility: hidden;
+}
+.note-pin:hover { color: var(--fg); }
+.note-card:hover .note-pin { visibility: visible; }
+.note-card.is-pinned .note-pin { visibility: visible; color: var(--accent); }
+.note-card.is-pinned .note-pin svg { fill: currentColor; }
+@media (hover: none) {
+  .note-pin { visibility: visible; }
 }
 .empty-state {
   padding: 40px 20px; text-align: center; color: var(--muted-fg); font-size: 13px;
@@ -653,4 +674,14 @@ a { color: inherit; }
 
   .history-drawer { width: 100%; }
   .login-card { width: calc(100vw - 32px); max-width: 360px; }
+}
+
+/* ---------- Public share page ---------- */
+.share-page { max-width: 760px; margin: 0 auto; padding: 48px 24px 80px; }
+.share-title { font-size: 28px; font-weight: 600; margin: 0 0 6px; color: var(--fg); word-break: break-word; }
+.share-meta { font-size: 12px; color: var(--muted-fg); margin-bottom: 28px; }
+.share-status { padding: 80px 0; text-align: center; color: var(--muted-fg); }
+.share-txt {
+  margin: 0; white-space: pre-wrap; word-break: break-word;
+  font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 14px; line-height: 1.7;
 }

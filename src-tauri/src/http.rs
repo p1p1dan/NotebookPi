@@ -10,6 +10,7 @@
 //   DELETE /api/notes/:id
 //   POST   /api/import                     { folder, notes[] }   - used to autocreate folder paths
 //   GET    /api/search?q=...
+//   GET|POST|DELETE /api/notes/:id/share
 //   GET    /api/health
 
 use crate::models::NoteFormat;
@@ -154,12 +155,14 @@ impl ApiClient {
         title: &str,
         content: &str,
         format: NoteFormat,
+        pinned: bool,
     ) -> Result<RemoteNote, ApiError> {
         let body = serde_json::json!({
             "folder_id": folder_id,
             "title": title,
             "content": content,
             "format": format.as_str(),
+            "pinned": pinned,
         });
         let v: NoteResp = self
             .json(reqwest::Method::POST, "/api/notes", Some(&body))
@@ -259,6 +262,31 @@ impl ApiClient {
         Ok(v.version)
     }
 
+    pub fn share_url(&self, token: &str) -> String {
+        format!("{}/s/{}", self.base, token)
+    }
+
+    pub async fn get_share(&self, note_id: i64) -> Result<Option<RemoteShare>, ApiError> {
+        let v: OptShareResp = self
+            .json(reqwest::Method::GET, &format!("/api/notes/{note_id}/share"), None)
+            .await?;
+        Ok(v.share)
+    }
+
+    pub async fn create_share(&self, note_id: i64) -> Result<RemoteShare, ApiError> {
+        let v: ShareResp = self
+            .json(reqwest::Method::POST, &format!("/api/notes/{note_id}/share"), None)
+            .await?;
+        Ok(v.share)
+    }
+
+    pub async fn revoke_share(&self, note_id: i64) -> Result<(), ApiError> {
+        let _: serde_json::Value = self
+            .json(reqwest::Method::DELETE, &format!("/api/notes/{note_id}/share"), None)
+            .await?;
+        Ok(())
+    }
+
     pub async fn restore_version(&self, note_id: i64, vid: i64) -> Result<RemoteNote, ApiError> {
         let v: NoteResp = self
             .json(reqwest::Method::POST, &format!("/api/notes/{note_id}/versions/{vid}/restore"), None)
@@ -316,6 +344,8 @@ pub struct RemoteNoteLite {
     pub excerpt: Option<String>,
     pub created_at: i64,
     pub updated_at: i64,
+    #[serde(default)]
+    pub pinned: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -327,12 +357,30 @@ pub struct RemoteNote {
     pub content: String,
     pub created_at: i64,
     pub updated_at: i64,
+    #[serde(default)]
+    pub pinned: bool,
 }
 
 #[derive(Debug, Clone)]
 pub struct RemoteFolderRef {
     pub id: Option<i64>,
     pub path: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct ShareResp {
+    share: RemoteShare,
+}
+
+#[derive(Debug, Deserialize)]
+struct OptShareResp {
+    share: Option<RemoteShare>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct RemoteShare {
+    pub token: String,
+    pub created_at: i64,
 }
 
 #[derive(Debug, Deserialize)]

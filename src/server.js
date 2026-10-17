@@ -9,6 +9,7 @@ import folderRoutes from './routes/folders.js';
 import noteRoutes from './routes/notes.js';
 import searchRoutes from './routes/search.js';
 import importRoutes from './routes/import.js';
+import shareRoutes from './routes/shares.js';
 import './db.js'; // initialize schema on boot
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -29,6 +30,7 @@ await app.register(folderRoutes);
 await app.register(noteRoutes);
 await app.register(searchRoutes);
 await app.register(importRoutes);
+await app.register(shareRoutes);
 
 app.get('/api/health', async () => ({ ok: true, ts: Date.now() }));
 
@@ -43,6 +45,15 @@ if (existsSync(PUBLIC_DIR)) {
   // SPA fallback: any non-/api GET returns index.html (so client routing works).
   // Re-read from disk each time so rebuilds are picked up without a server restart.
   const indexHtmlPath = join(PUBLIC_DIR, 'index.html');
+  // Public read-only share page; the note itself is fetched from /api/public/shares/:token.
+  const shareHtmlPath = join(PUBLIC_DIR, 'share.html');
+  app.get('/s/:token', (_req, reply) => {
+    reply
+      .header('Referrer-Policy', 'no-referrer')   // keep the token out of outbound Referer headers
+      .header('X-Robots-Tag', 'noindex, nofollow')
+      .type('text/html')
+      .send(readFileSync(shareHtmlPath, 'utf-8'));
+  });
   app.setNotFoundHandler((req, reply) => {
     if (req.method === 'GET' && !req.url.startsWith('/api/')) {
       return reply.type('text/html').send(readFileSync(indexHtmlPath, 'utf-8'));

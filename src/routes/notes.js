@@ -11,8 +11,13 @@ const validContent = (c) => typeof c === 'string' && c.length <= MAX_CONTENT;
 const validFormat  = (f) => typeof f === 'string' && VALID_FORMATS.has(f);
 
 // Field lists kept in one place so list/detail SELECTs stay aligned.
-const LIST_COLS   = `id, folder_id, title, format, SUBSTR(content, 1, 240) AS excerpt, created_at, updated_at`;
-const DETAIL_COLS = `id, folder_id, title, format, content, created_at, updated_at`;
+const LIST_COLS   = `id, folder_id, title, format, SUBSTR(content, 1, 240) AS excerpt, created_at, updated_at, pinned`;
+const DETAIL_COLS = `id, folder_id, title, format, content, created_at, updated_at, pinned`;
+const LIST_ORDER  = `ORDER BY pinned DESC, updated_at DESC`;
+
+// SQLite has no boolean type; expose pinned as a JSON boolean.
+const toApi = (row) => row && { ...row, pinned: row.pinned === 1 };
+const getNote = (id) => toApi(db.prepare(`SELECT ${DETAIL_COLS} FROM notes WHERE id = ?`).get(id));
 
 // --- Helpers ---------------------------------------------------------------
 const insertVersionStmt = db.prepare(
@@ -40,96 +45,102 @@ export default async function noteRoutes(app) {
     let rows;
     if (folder_id === undefined || folder_id === '' || folder_id === 'null') {
       rows = db.prepare(
-        `SELECT ${LIST_COLS} FROM notes WHERE folder_id IS NULL ORDER BY updated_at DESC`
+        `SELECT ${LIST_COLS} FROM notes WHERE folder_id IS NULL ${LIST_ORDER}`
       ).all();
     } else if (folder_id === 'all') {
       rows = db.prepare(
-        `SELECT ${LIST_COLS} FROM notes ORDER BY updated_at DESC LIMIT 500`
+        `SELECT ${LIST_COLS} FROM notes ${LIST_ORDER} LIMIT 500`
       ).all();
     } else {
       const fid = Number(folder_id);
       if (!Number.isInteger(fid)) return { notes: [] };
       rows = db.prepare(
-        `SELECT ${LIST_COLS} FROM notes WHERE folder_id = ? ORDER BY updated_at DESC`
+        `SELECT ${LIST_COLS} FROM notes WHERE folder_id = ? ${LIST_ORDER}`
       ).all(fid);
     }
-    return { notes: rows };
+    return { notes: rows.map(toApi) };
   });
 
   app.get('/api/notes/:id', async (req, reply) => {
     const id = Number(req.params.id);
     if (!Number.isInteger(id)) return reply.code(400).send({ error: 'invalid_id' });
-    const note = db.prepare(`SELECT ${DETAIL_COLS} FROM notes WHERE id = ?`).get(id);
+    const note = getNote(id);
     if (!note) return reply.code(404).send({ error: 'not_found' });
     return { note };
   });
 
   app.post('/api/notes', async (req, reply) => {
-    const { folder_id = null, title = '', content = '', format = 'txt' } = req.body ?? {};
+    const { folder_id = null, title = '', content = '', format = 'txt', pinned = false } = req.body ?? {};
     if (!validTitle(title))     return reply.code(400).send({ error: 'invalid_title' });
     if (!validContent(content)) return reply.code(400).send({ error: 'invalid_content' });
     if (!validFormat(format))   return reply.code(400).send({ error: 'invalid_format' });
+    if (typeof pinned !== 'boolean') return reply.code(400).send({ error: 'invalid_pinned' });
     if (folder_id != null) {
       const exists = db.prepare('SELECT id FROM folders WHERE id = ?').get(folder_id);
       if (!exists) return reply.code(400).send({ error: 'folder_not_found' });
     }
     const ts = now();
     const info = db.prepare(
-      `INSERT INTO notes (folder_id, title, content, format, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?)`
-    ).run(folder_id, title, content, format, ts, ts);
+      `INSERT INTO notes (folder_id, title, content, format, pinned, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`
+    ).run(folder_id, title, content, format, pinned ? 1 : 0, ts, ts);
     // Seed the first version only if content is non-empty (don't spam empty rows).
     if (content.length > 0) recordVersion(info.lastInsertRowid, content, ts);
-    const note = db.prepare(`SELECT ${DETAIL_COLS} FROM notes WHERE id = ?`).get(info.lastInsertRowid);
-    return reply.code(201).send({ note });
+    return reply.code(201).send({ note: getNote(info.lastInsertRowid) });
   });
 
   app.put('/api/notes/:id', async (req, reply) => {
     const id = Number(req.params.id);
     if (!Number.isInteger(id)) return reply.code(400).send({ error: 'invalid_id' });
-    const existing = db.prepare('SELECT content FROM notes WHERE id = ?').get(id);
+    const existing = db.prepare(
+      'SELECT title, content, folder_id, format, pinned FROM notes WHERE id = ?'
+    ).get(id);
     if (!existing) return reply.code(404).send({ error: 'not_found' });
 
-    const { title, content, folder_id, format } = req.body ?? {};
+    // Only fields that actually differ are written: desktop sync always sends the
+    // full snapshot, so a pin-only change must not look like a content edit.
+    const { title, content, folder_id, format, pinned } = req.body ?? {};
     const updates = {};
     if (title !== undefined) {
       if (!validTitle(title)) return reply.code(400).send({ error: 'invalid_title' });
-      updates.title = title;
+      if (title !== existing.title) updates.title = title;
     }
     if (content !== undefined) {
       if (!validContent(content)) return reply.code(400).send({ error: 'invalid_content' });
-      updates.content = content;
+      if (content !== existing.content) updates.content = content;
     }
     if (folder_id !== undefined) {
       if (folder_id != null) {
         const exists = db.prepare('SELECT id FROM folders WHERE id = ?').get(folder_id);
         if (!exists) return reply.code(400).send({ error: 'folder_not_found' });
       }
-      updates.folder_id = folder_id;
+      if (folder_id !== existing.folder_id) updates.folder_id = folder_id;
     }
     if (format !== undefined) {
       if (!validFormat(format)) return reply.code(400).send({ error: 'invalid_format' });
-      updates.format = format;
+      if (format !== existing.format) updates.format = format;
     }
-    if (Object.keys(updates).length === 0) {
-      const note = db.prepare(`SELECT ${DETAIL_COLS} FROM notes WHERE id = ?`).get(id);
-      return { note };
+    if (pinned !== undefined) {
+      if (typeof pinned !== 'boolean') return reply.code(400).send({ error: 'invalid_pinned' });
+      if ((pinned ? 1 : 0) !== existing.pinned) updates.pinned = pinned ? 1 : 0;
     }
-    updates.updated_at = now();
+    if (Object.keys(updates).length === 0) return { note: getNote(id) };
+
+    // Pinning is not an edit, so it leaves updated_at (recency) alone.
+    const ts = now();
+    if (Object.keys(updates).some(k => k !== 'pinned')) updates.updated_at = ts;
     const setClause = Object.keys(updates).map(k => `${k} = ?`).join(', ');
 
     // Transaction: snapshot + UPDATE atomically.
-    const contentChanged = updates.content !== undefined && updates.content !== existing.content;
     const txn = db.transaction(() => {
       db.prepare(`UPDATE notes SET ${setClause} WHERE id = ?`).run(...Object.values(updates), id);
-      if (contentChanged && updates.content.length > 0) {
-        recordVersion(id, updates.content, updates.updated_at);
+      if (updates.content !== undefined && updates.content.length > 0) {
+        recordVersion(id, updates.content, ts);
       }
     });
     txn();
 
-    const note = db.prepare(`SELECT ${DETAIL_COLS} FROM notes WHERE id = ?`).get(id);
-    return { note };
+    return { note: getNote(id) };
   });
 
   app.delete('/api/notes/:id', async (req, reply) => {
@@ -186,7 +197,7 @@ export default async function noteRoutes(app) {
       recordVersion(id, v.content, ts);
     });
     txn();
-    const note = db.prepare(`SELECT ${DETAIL_COLS} FROM notes WHERE id = ?`).get(id);
+    const note = getNote(id);
     if (!note) return reply.code(404).send({ error: 'not_found' });
     return { note };
   });
