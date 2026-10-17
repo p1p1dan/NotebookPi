@@ -261,7 +261,7 @@ npm run tauri:dev
 ### 打包
 
 ```bash
-# Windows (.msi / .exe)
+# Windows (.msi / -setup.exe)
 npm run tauri:build
 
 # Linux (.deb / .AppImage)
@@ -269,6 +269,19 @@ npm run tauri:build
 ```
 
 产物落在 `src-tauri/target/release/bundle/`。**图标**默认是 `src-tauri/icons/` 里的占位文件；要发布前先跑 `npx @tauri-apps/cli icon path/to/source.png` 生成正式图标。
+
+### 用 GitHub Actions 发版
+
+推送 `v*` tag 会触发 `.github/workflows/release-desktop.yml`，在 Windows / Linux 上打包并上传到**草稿 Release**：
+
+```bash
+# 1. 改 src-tauri/tauri.conf.json 的 "version"（安装包版本以它为准），提交并推送
+# 2. 打 tag 并推送
+git tag v0.2.0
+git push origin v0.2.0
+```
+
+在仓库 Actions 页查看进度（约 15–20 分钟），完成后到 Releases 页检查草稿并点「Publish release」。产物：Windows `.msi` + `-setup.exe`，Linux `.deb` + `.AppImage`。安装包未签名，Windows 首次安装会出现 SmartScreen 提示。
 
 ### 本地数据位置
 

@@ -27,7 +27,6 @@ Thumbs.db
 # Tauri desktop
 src-tauri/target/
 src-tauri/gen/schemas/
-src-tauri/Cargo.lock
 
 # Desktop runtime secrets / local config (machine-specific, do NOT commit)
 *.secrets.bin
